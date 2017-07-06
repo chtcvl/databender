@@ -1,0 +1,374 @@
+<html>
+<head><title>Test</title>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid.min.css" />
+<link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid-theme.min.css" />
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid.min.js"></script>
+<link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" />
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-alpha.6/js/bootstrap.min.js"></script>
+<style>
+.jsgrid-cell, .jsgrid-header-cell {
+    overflow: hidden;
+    line-height: 10px;
+    max-height: 10px;
+    white-space: nowrap;
+}
+body {
+  padding-top: 50px;
+}
+.navbar-inverse .navbar-brand, .navbar-inverse .navbar-toggler {
+    color: #fff !important;
+}
+.sidebar {
+  position: fixed;
+  top: 51px;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
+  border-right: 1px solid #eee;
+}
+
+/* Sidebar navigation */
+.sidebar {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar .nav {
+  margin-bottom: 20px;
+}
+
+.sidebar .nav-item {
+  width: 100%;
+}
+
+.sidebar .nav-item + .nav-item {
+  margin-left: 0;
+}
+
+.sidebar .nav-link {
+  border-radius: 0;
+}
+
+</style>
+</head>
+<body>
+<nav class="navbar navbar-toggleable-md navbar-inverse fixed-top bg-inverse">
+    <a class="navbar-brand">Data pipeline</a>
+</nav>
+<div class="container-fluid">
+<div class="row">
+    <div class="col-md-2 bg-faded sidebar">
+        <ul class="nav nav-pills flex-column">
+            <li class="nav-item">
+                <a class="nav-link active" href="#">Configuration</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#">Datasets</a>
+            </li>
+        </ul>
+    </div>
+    <div class="col-md-10 offset-md-2" style="padding: 20px;">
+        <div id="configLayer">
+            <h1>Datasets</h1>
+                <div id="jsGrid"></div>
+                <h1>Datatypes</h1>
+                <div id="jsGridDT"></div>
+        </div>
+        <div id="dataLayer">
+            <h1>Data</h1>
+            <div id="results">
+				<!-- errors go here -->
+			</div>
+            <form method="POST" id="ds-form">
+                <div class="form-group row">
+                    <label for="ds-form-datasetid" class="col-sm-2 col-form-label">Dataset ID</label>
+	        		<input type="text" class="form-control col-sm-10" id="ds-form-datasetid">
+                </div>
+                <button type="button" class="btn btn-primary" id="ds-form-button" onclick="init_dataset();">Retrieve data</button>
+            </form>
+            <div id="ds-div">
+                <form method="POST" id="ds-console">
+                    <div class="form-group">
+                        <label for="ds-console-instructions">Transformation instructions</label>
+                        <textarea class="form-control" id="ds-console-instructions" rows="8"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="transform_dataset();">Transform data</button>
+                </form>
+                <table id="ds-table" class="table table-bordered">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+
+    </div>
+</div>
+</div>
+<script>
+
+    var Field = jsGrid.Field;
+
+    function RepField(config) {
+        Field.call(this, config);
+    }
+
+    RepField.prototype = new Field({
+
+        autosearch: true,
+		readOnly: false,
+
+        filterTemplate: function() {
+            if(!this.filtering)
+                return "";
+
+            var grid = this._grid,
+                $result = this.filterControl = this._createTextBox();
+
+            if(this.autosearch) {
+                $result.on("keypress", function(e) {
+                    if(e.which === 13) {
+                        grid.search();
+                        e.preventDefault();
+                    }
+                });
+            }
+
+            return $result;
+        },
+
+      itemTemplate : function(value) {
+        if (!value) {
+          return "";
+        }
+        return JSON.stringify(value)
+      },
+
+        insertTemplate: function() {
+            if(!this.inserting)
+                return "";
+
+            return this.insertControl = this._createTextBox();
+        },
+
+        editTemplate: function(value) {
+            if(!this.editing)
+                return this.itemTemplate.apply(this, arguments);
+
+            var $result = this.editControl = this._createTextBox();
+            $result.val(JSON.stringify(value));
+            return $result;
+        },
+
+        filterValue: function() {
+            return this.filterControl.val();
+        },
+
+        insertValue: function() {
+            return this.insertControl.val();
+        },
+
+        editValue: function() {
+            return this.editControl.val();
+        },
+
+        _createTextBox: function() {
+            return $("<input>").attr("type", "text")
+                .prop("readonly", !!this.readOnly);
+        }
+    });
+
+    jsGrid.fields.repeating = RepField;
+
+    $("#jsGrid").jsGrid({
+        width: "100%",
+        height: "200px",
+
+        inserting: true,
+        editing: true,
+        sorting: true,
+        paging: true,
+        autoload: true,
+        pageLoading: true,
+        pageSize: 15,
+        pageIndex: 1,
+        pageButtonCount: 15,
+        pagerFormat: "Pages: {first} {prev} {pages} {next} {last}    {pageIndex} of {pageCount}",
+        pagePrevText: "Prev",
+        pageNextText: "Next",
+        pageFirstText: "First",
+        pageLastText: "Last",
+        pageNavigatorNextText: "...",
+        pageNavigatorPrevText: "...",
+
+        controller: {
+            loadData: function(filter) {
+                console.log(filter);
+
+                return $.ajax({
+                    type: "GET",
+                    url: "http://127.0.0.1:6543/datasets",
+                    datatype: "json",
+                    data: filter
+                }).done(function(result) {
+                       console.log(result.data);
+                       return result.data;
+                });
+
+            },
+            insertItem: function(item) {
+                console.log(item);
+                return $.ajax({
+                    type: "POST",
+                    url: "http://127.0.0.1:6543/datasets",
+                    data: item
+                });
+            },
+            updateItem: function(item) {
+                console.log(item);
+                return $.ajax({
+                    type: "POST",
+                    url: "http://127.0.0.1:6543/datasets",
+                    data: item
+                });
+            },
+            deleteItem: function(item) {
+                console.log(item);
+                return $.ajax({
+                    type: "DELETE",
+                    url: "http://127.0.0.1:6543/datasets",
+                    data: item
+                });
+            },
+        },
+
+        fields: [
+ { name: "id", width: 15},
+ { name: "name", type: "text", width: 40, validate: "required" },
+ { name: "description", type: "text", width: 40, validate: "required"},
+ { name: "atom", type: "text", width: 40, validate: "required" },
+ { name: "sources", type: "repeating", width: 40, validate: "required", title: "Src" },
+ { name: "lastupdate", type: "text", width: 40 },
+ { type: "control", width: 10 }
+        ]
+
+    });
+
+</script>
+<script>
+    $("#jsGridDT").jsGrid({
+        width: "100%",
+        height: "200px",
+
+        inserting: true,
+        editing: true,
+        sorting: true,
+        paging: true,
+        autoload: true,
+        pageLoading: true,
+        pageSize: 15,
+        pageIndex: 1,
+        pageButtonCount: 15,
+        pagerFormat: "Pages: {first} {prev} {pages} {next} {last}    {pageIndex} of {pageCount}",
+        pagePrevText: "Prev",
+        pageNextText: "Next",
+        pageFirstText: "First",
+        pageLastText: "Last",
+        pageNavigatorNextText: "...",
+        pageNavigatorPrevText: "...",
+
+        controller: {
+            loadData: function(filter) {
+                console.log(filter);
+
+                return $.ajax({
+                    type: "GET",
+                    url: "http://127.0.0.1:6543/datatypes",
+                    datatype: "json",
+                    data: filter
+                }).done(function(result) {
+                       console.log(result.data);
+                       return result.data;
+                });
+
+            },
+            insertItem: function(item) {
+                console.log(item);
+                return $.ajax({
+                    type: "POST",
+                    url: "http://127.0.0.1:6543/datatypes",
+                    data: item
+                });
+            },
+            updateItem: function(item) {
+                console.log(item);
+                return $.ajax({
+                    type: "POST",
+                    url: "http://127.0.0.1:6543/datatypes",
+                    data: item
+                });
+            },
+            deleteItem: function(item) {
+                console.log(item);
+                return $.ajax({
+                    type: "DELETE",
+                    url: "http://127.0.0.1:6543/datatypes",
+                    data: item
+                });
+            },
+        },
+
+        fields: [
+ { name: "id",  width: 15},
+ { name: "name", type: "text", width: 40, validate: "required" },
+ { name: "dtgrid", type: "text", width: 40, validate: "required"},
+ { name: "dtdesc", type: "text", width: 40, validate: "required" },
+ { name: "dtpython", type: "text", width: 40, validate: "required"},
+ { type: "control", width: 10 }
+        ]
+
+    });
+
+</script>
+<script>
+var const_fields = [];
+function init_dataset() {
+document.getElementById("ds-form-button").className = "btn btn-primary disabled";
+$.ajax({
+    url: "http://127.0.0.1:6543/unfolddata/" + $('#ds-form-datasetid').val(),
+    type: "GET",
+    success: function(json) {
+        const_fields = json.fields;
+		$("#ds-table tbody tr").remove();
+		$("#ds-table thead th").remove();
+		$('#results').html("<div class='alert-box alert radius' data-alert>"+
+		    json.itemsCount+" item(s) retrieved from dataset <span class='close' data-dismiss='alert'>&times;</span>");
+		$.each(json.fields, function(index,item) {
+			$("#ds-table thead").append("<th>"+item+"</th>");
+		});
+		$.each(json.data, function(index,item) {
+
+			var line = "<tr>";
+			for (var key in json.fields) {
+
+					line += "<td>"+item[json.fields[key]]+"</td>";
+			}
+			line += "</tr>";
+			$("#ds-table tbody").append(line);
+		});
+        console.log("success"); // another sanity check
+    },
+    error: function(xhr,errmsg,err) {
+        $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
+        " <span class='close' data-dismiss='alert'>&times;</span></div>"); // add the error to the dom
+    }
+});
+document.getElementById("ds-form-button").className = "btn btn-primary";
+}
+</script>
+</body>
+</html>
